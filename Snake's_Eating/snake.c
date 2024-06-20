@@ -1,7 +1,15 @@
 //snake.c -- 贪吃蛇游戏函数定义
-
 #define _CRT_SECURE_NO_WARNINGS
 #include "snake.h"
+
+Snake* snake = NULL;
+Map* map = NULL;
+Food* food = NULL;
+bool isExit = false;
+
+char mapBlock = ' ';
+char snakeBlock = 'O';
+char foodBlock = '*';
 
 void createMap(int width, int high)
 {
@@ -10,7 +18,7 @@ void createMap(int width, int high)
 	int col;
 
 	map = (Map*)malloc(sizeof(Map));
-	if (2 < width || 2 < high)
+	if (2 > width || 2 > high)
 	{
 		map->high = HIGH;
 		map->width = WIDTH;
@@ -112,8 +120,10 @@ void showMap(void)
 			default:
 				break;
 			}
-		printf("\n");
+		printf("|\n");
 	}
+	for (col = 0; col < map->width; col++)printf("--");
+	printf("\n");
 }
 
 Snake* createSnake(int length)
@@ -143,8 +153,34 @@ Snake* createSnake(int length)
 	snake->bodys = body;
 	snake->minLength = length;
 	snake->length = length;
+	snake->isDead = false;
 
 	return snake;
+}
+
+void forward(SnakeBody* nextBlock, SnakeBody* finalBody)
+{
+	//下一格是空地
+	nextBlock->next = snake->bodys;
+	snake->bodys = nextBlock;
+	free(finalBody->next);
+	finalBody->next = NULL;
+	return;
+}
+
+void eat(SnakeBody* nextBlock)
+{
+	//吃到食物
+	nextBlock->next = snake->bodys;
+	snake->bodys = nextBlock;
+	snake->length++;
+	createFood();
+	return;
+}
+
+void die(void)
+{
+	snake->isDead = true;
 }
 
 void destroySnake(void)
@@ -202,7 +238,7 @@ int initGame(void)
 
 int resetGame(void)
 {
-	//重置蛇的长度、重置水果位置
+	//重置蛇属性、重置水果位置
 	int i;
 	SnakeBody* body = NULL;
 
@@ -212,7 +248,15 @@ int resetGame(void)
 		snake->bodys = snake->bodys->next;
 		free(temp);
 	}
-	for (i = 0; i < snake->minLength; i++)
+	//for (i = 0; i < snake->minLength; i++)
+	//{
+	//	SnakeBody* head = (SnakeBody*)malloc(sizeof(SnakeBody));
+	//	head->next = body;
+	//	head->y = map->high / 2;
+	//	head->x = map->width / 2 - i;
+	//	body = head;
+	//}
+	for (i = snake->minLength - 1; i >= 0; i--)
 	{
 		SnakeBody* head = (SnakeBody*)malloc(sizeof(SnakeBody));
 		head->next = body;
@@ -220,7 +264,10 @@ int resetGame(void)
 		head->x = map->width / 2 - i;
 		body = head;
 	}
+	snake->bodys = body;
+	snake->drct = right;
 	snake->length = snake->minLength;
+	snake->isDead = false;
 
 	createFood();
 
@@ -234,8 +281,102 @@ int exitGame(void)
 	destroySnake();
 	destroyMap();
 
+	isExit = true;
+
 	return 0;
 }
 
+void checkNext(void)
+{
+	//根据方向判断下一格是墙/身体/食物/空地
+	Direction dir = snake->drct;
+	SnakeBody* tempBody = snake->bodys;
+	SnakeBody* finalBody = NULL;
+	SnakeBody* nextBlock = (SnakeBody*)malloc(sizeof(SnakeBody));
+	int i;
+	switch (dir)
+	{
+	case up:
+		nextBlock->x = tempBody->x;
+		nextBlock->y = tempBody->y - 1;
+		break;
+	case down:
+		nextBlock->x = tempBody->x;
+		nextBlock->y = tempBody->y + 1;
+		break;
+	case left:
+		nextBlock->x = tempBody->x - 1;
+		nextBlock->y = tempBody->y;
+		break;
+	case right:
+		nextBlock->x = tempBody->x + 1;
+		nextBlock->y = tempBody->y;
+		break;
+	default:
+		break;
+	}
+	//撞墙
+	if (nextBlock->x < 0 || nextBlock->y < 0 || nextBlock->x >= map->width || nextBlock->y >= map->high)
+	{
+		die();
+		free(nextBlock);
+	}
+	//吃到食物
+	else if (nextBlock->x == food->x && nextBlock->y == food->y) eat(nextBlock);
+	else
+	{
+		for (i = 0; i < snake->length-1; tempBody = tempBody->next, i++)
+		{
+			//下一节是该节身体
+			if (tempBody->x == nextBlock->x && tempBody->y == nextBlock->y)
+				break;
+			//最后的2节
+			if (i == snake->length - 2)
+				finalBody = tempBody;
+		}
+		//咬到该节身体
+		if (tempBody->next) {
+			die();
+			free(nextBlock);
+		}
+		//下一格为空地
+		else forward(nextBlock, finalBody);
+	}
+	return;
+}
 
+Direction inputKey(void)
+{
+	int sleepTime = 0;
+	Direction ch = 0;
+	//清空输入缓冲区
+	while (kbhit()) getch();
+
+	while (true)
+	{
+		Sleep(50);
+		sleepTime += 50;
+
+		if (sleepTime >= FORWARD_TIME) break; //结束输入
+
+		if (kbhit() && !ch)			//检测到键盘输入 且 ch未读取过输入
+		{
+			if ((ch = getch())==224)	//读取输入，输入的是功能键
+				switch (ch = getch())
+				{
+				case up:	//上下左右
+				case down:
+				case left:
+				case right:
+					break;
+				default:	//其他功能键
+					ch = 0;
+					break;
+				}
+			else ch = 0;	//输入的不是功能键
+		}
+	}
+
+	return ch;
+}
 
